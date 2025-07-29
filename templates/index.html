@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据展示</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="top-nav">
+            <div class="logo"><img src="/static/logo.png" alt="LOGO"></div>
+            <div class="top-nav-content"></div>
+        </header>
+        <aside class="side-nav"></aside>
+        <main class="main-content">
+            <div id="table-container">
+                {% if table %}{{ table|safe }}{% else %}<p>未找到数据文件。</p>{% endif %}
+            </div>
+        </main>
+    </div>
+</body>
+</html> 
