@@ -160,13 +160,13 @@ def generate_sql_table(csv_file_path: str, table_name: str = "ModelEvaluation", 
     sql_lines.append("-- 创建模型评估结果表")
     sql_lines.append(f"CREATE TABLE IF NOT EXISTS {table_name} (")
     
-    # 添加固定列定义（与summary.sql保持一致）
+    # 添加固定列定义（使用中文列名）
     column_definitions = [
-        "    id INTEGER PRIMARY KEY AUTOINCREMENT",
-        "    dataset TEXT NOT NULL",
-        "    version TEXT NOT NULL", 
-        "    metric TEXT NOT NULL",
-        "    mode TEXT NOT NULL",
+        "    序号 INTEGER PRIMARY KEY AUTOINCREMENT",
+        "    数据集 TEXT NOT NULL",
+        "    版本 TEXT NOT NULL", 
+        "    评估指标 TEXT NOT NULL",
+        "    模式 TEXT NOT NULL",
     ]
     
     # 根据CSV列数动态添加额外的列
@@ -226,10 +226,14 @@ def import_csv_to_db(csv_file_path: str, db_path: str = "./static/summary.db"):
         # 清理列名，使其与数据库表结构匹配
         fieldnames = []
         for i, field in enumerate(original_fieldnames):
-            if i < 4:  # 前4列保持原样
-                fieldnames.append(field)
-            elif field == 'qwen2.5-1.5b-instruct-hf':
-                fieldnames.append('qwen2_5_1_5b_instruct_hf')  # 使用数据库中的实际列名
+            if i == 0:  # dataset -> 数据集
+                fieldnames.append('数据集')
+            elif i == 1:  # version -> 版本
+                fieldnames.append('版本')
+            elif i == 2:  # metric -> 评估指标
+                fieldnames.append('评估指标')
+            elif i == 3:  # mode -> 模式
+                fieldnames.append('模式')
             else:
                 # 其他列使用清理后的列名
                 fieldnames.append(clean_column_name(field))
