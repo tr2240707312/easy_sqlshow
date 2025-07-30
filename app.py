@@ -259,7 +259,19 @@ def import_csv_to_db(csv_file_path: str, db_path: str = "./static/summary.db"):
                 else:
                     # 尝试转换为浮点数（如果是数值字段）
                     try:
-                        values.append(float(value))
+                        float_val = float(value)
+                        # 检查小数位数
+                        if '.' in value:
+                            decimal_places = len(value.split('.')[1])
+                            if decimal_places < 2:
+                                # 小数位数不足两位，补到两位
+                                values.append(f"{float_val:.2f}")
+                            else:
+                                # 小数位数足够，保持原样
+                                values.append(value)
+                        else:
+                            # 整数，格式化为两位小数
+                            values.append(f"{float_val:.2f}")
                     except ValueError:
                         # 如果转换失败，保持原始字符串值
                         values.append(value)
@@ -382,16 +394,41 @@ def render_table(data):
     # 如果没有数据，返回空字符串
     if not data:
         return ''
+    
     html = '<table><thead><tr>'
     # 渲染表头
     for col in data[0]:
         html += f'<th>{str(col)}</th>'
     html += '</tr></thead><tbody>'
+    
     # 渲染每一行数据
     for row in data[1:]:
         html += '<tr>'
-        for cell in row:
-            html += f'<td>{str(cell)}</td>'
+        for i, cell in enumerate(row):
+            # 格式化数值显示
+            if i > 4 and cell is not None:  # 第5列开始是数值列
+                try:
+                    # 尝试转换为浮点数并格式化
+                    float_val = float(cell)
+                    cell_str = str(cell)
+                    # 检查小数位数
+                    if '.' in cell_str:
+                        decimal_places = len(cell_str.split('.')[1])
+                        if decimal_places < 2:
+                            # 小数位数不足两位，补到两位
+                            formatted_cell = f"{float_val:.2f}"
+                        else:
+                            # 小数位数足够，保持原样
+                            formatted_cell = cell_str
+                    else:
+                        # 整数，格式化为两位小数
+                        formatted_cell = f"{float_val:.2f}"
+                except (ValueError, TypeError):
+                    formatted_cell = str(cell)
+            else:
+                formatted_cell = str(cell)
+            
+            html += f'<td>{formatted_cell}</td>'
         html += '</tr>'
     html += '</tbody></table>'
     return html
