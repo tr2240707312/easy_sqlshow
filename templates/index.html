@@ -14,6 +14,19 @@
         </header>
         <aside class="side-nav"></aside>
         <main class="main-content">
+            <!-- 横排文本说明区域 -->
+            <div class="text-info">
+                <div class="info-item">
+                    <h3>ppl (困惑度)</h3>
+                    <p>ppl 是困惑度 (perplexity) 的缩写，是一种评价模型进行语言建模能力的指标。在当前评测工具的语境下，它一般指一种选择题的做法：给定一个上下文，模型需要从多个备选项中选择一个最合适的。此时，我们会将 n 个选项拼接上上下文后，形成 n 个序列，然后计算模型对这 n 个序列的 perplexity，我们认为其中 perplexity 最低的序列所对应的选项即为模型在这道题上面的推理结果，该种评测方法的后处理简单直接、确定性高。</p>
+                </div>
+                <div class="info-item">
+                    <h3>gen (生成)</h3>
+                    <p>gen 是生成 (generate) 的缩写。在当前评测环境的语境下，它指的是在给定上下文的情况下，模型往后续写的结果就是这道题目上的推理结果。一般来说，续写得到的字符串需要结合上比较重的后处理过程，才能进行可靠的答案提取，从而完成评测。</p>
+                </div>
+            </div>
+            
+            <!-- 数据表格区域 -->
             <div id="table-container">
                 {% if table %}{{ table|safe }}{% else %}<p>未找到数据文件。</p>{% endif %}
             </div>

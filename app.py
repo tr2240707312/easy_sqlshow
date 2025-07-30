@@ -508,8 +508,15 @@ def main():
     if len(sys.argv) > 3:
         db_path = sys.argv[3]
     
-    # 处理CSV到数据库
-    process_csv_to_database(csv_file_path, table_name, db_path)
+    try:
+        # 处理CSV到数据库
+        process_csv_to_database(csv_file_path, table_name, db_path)
+    finally:
+        # 脚本结束时删除hash文件
+        hash_file_path = db_path + ".hash"
+        if os.path.exists(hash_file_path):
+            os.remove(hash_file_path)
+            print("已删除hash文件")
 
 
 if __name__ == '__main__':
@@ -519,4 +526,12 @@ if __name__ == '__main__':
     else:
         # 如果作为Web应用运行，启动Flask服务器
         print("启动Web服务器...")
-        app.run(debug=True) 
+        try:
+            app.run(debug=True)
+        except KeyboardInterrupt:
+            print("\n程序正在退出...")
+        finally:
+            # 程序结束时删除hash文件
+            hash_file_path = "./static/summary.db.hash"
+            if os.path.exists(hash_file_path):
+                os.remove(hash_file_path)
