@@ -166,12 +166,13 @@ def generate_sql_table(csv_file_path: str, table_name: str = "ModelEvaluation", 
         "    数据集 TEXT NOT NULL",
         "    版本 TEXT NOT NULL", 
         "    评估指标 TEXT NOT NULL",
+        "    参数 TEXT NOT NULL",
         "    模式 TEXT NOT NULL",
     ]
     
     # 根据CSV列数动态添加额外的列
-    if len(columns_info) > 4:  # 如果CSV有超过5列（前5列对应固定列）
-        for i in range(4, len(columns_info)):
+    if len(columns_info) > 5:  # 如果CSV有超过6列（前6列对应固定列）
+        for i in range(5, len(columns_info)):
             col_info = columns_info[i]
             # 为额外的列使用DECIMAL类型，允许NULL值
             col_def = f"    {col_info['clean_name']} DECIMAL(10, 4)"
@@ -232,7 +233,9 @@ def import_csv_to_db(csv_file_path: str, db_path: str = "./static/summary.db"):
                 fieldnames.append('版本')
             elif i == 2:  # metric -> 评估指标
                 fieldnames.append('评估指标')
-            elif i == 3:  # mode -> 模式
+            elif i == 3:  # mode -> 参数
+                fieldnames.append('参数')
+            elif i == 4:  # parameter -> 模式
                 fieldnames.append('模式')
             else:
                 # 其他列使用清理后的列名
@@ -406,7 +409,7 @@ def render_table(data):
         html += '<tr>'
         for i, cell in enumerate(row):
             # 格式化数值显示
-            if i > 4 and cell is not None:  # 第5列开始是数值列
+            if i > 5 and cell is not None:  # 第6列开始是数值列
                 try:
                     # 尝试转换为浮点数并格式化
                     float_val = float(cell)
