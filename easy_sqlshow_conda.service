@@ -1,0 +1,25 @@
+[Unit]
+Description=Easy SQL Show - CSV数据可视化工具
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/home/user/tr_work/easy_sqlshow
+Environment=FLASK_APP=app.py
+Environment=FLASK_ENV=production
+Environment=FLASK_HOST=0.0.0.0
+Environment=FLASK_PORT=5000
+Environment=FLASK_DEBUG=False
+ExecStart=/bin/bash -c 'source /home/user/miniconda3/etc/profile.d/conda.sh && conda activate base && python app.py'
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=easy_sqlshow
+
+[Install]
+WantedBy=multi-user.target 

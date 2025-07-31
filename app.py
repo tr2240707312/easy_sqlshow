@@ -567,7 +567,7 @@ if __name__ == '__main__':
         # 如果作为Web应用运行，启动Flask服务器
         print("启动Web服务器...")
         try:
-            app.run(debug=True)
+            app.run(host='0.0.0.0', port=5000, debug=True)
         except KeyboardInterrupt:
             print("\n程序正在退出...")
         finally:
