@@ -17,23 +17,32 @@ from flask import Flask, render_template
 app = Flask(__name__)
 
 
-def clean_column_name(column_name: str) -> str:
+def clean_column_name(column_name: str, preserve_chinese: bool = False) -> str:
     """
     清理列名，使其符合SQL标识符规范
     
     Args:
         column_name: 原始列名
+        preserve_chinese: 是否保留中文字符
         
     Returns:
         清理后的列名
     """
-    # 移除特殊字符，只保留字母、数字和下划线
-    cleaned = re.sub(r'[^a-zA-Z0-9_]', '_', column_name)
+    if preserve_chinese:
+        # 保留中文字符，只移除特殊符号
+        cleaned = re.sub(r'[^\w\u4e00-\u9fff]', '_', column_name)
+    else:
+        # 移除特殊字符，只保留字母、数字和下划线
+        cleaned = re.sub(r'[^a-zA-Z0-9_]', '_', column_name)
+    
     # 确保不以数字开头
     if cleaned and cleaned[0].isdigit():
         cleaned = 'col_' + cleaned
-    # 转换为小写
-    cleaned = cleaned.lower()
+    
+    if not preserve_chinese:
+        # 转换为小写（仅当不保留中文时）
+        cleaned = cleaned.lower()
+    
     # 移除连续的下划线
     cleaned = re.sub(r'_+', '_', cleaned)
     # 移除开头和结尾的下划线
@@ -57,20 +66,34 @@ def infer_data_type(sample_values: List[str]) -> str:
     # 检查是否为数字
     numeric_count = 0
     decimal_count = 0
+    scientific_count = 0
     
     for value in sample_values:
         if value.strip():
             try:
-                float(value)
-                numeric_count += 1
-                if '.' in value:
-                    decimal_count += 1
-            except ValueError:
+                # 检查是否包含科学计数法
+                if 'E' in value.upper() or 'e' in value:
+                    float_val = float(value)
+                    numeric_count += 1
+                    scientific_count += 1
+                    # 检查数值是否过大
+                    if abs(float_val) > 1e308 or (abs(float_val) < 1e-308 and float_val != 0):
+                        # 如果数值过大，直接返回TEXT类型
+                        return 'TEXT'
+                else:
+                    float_val = float(value)
+                    numeric_count += 1
+                    if '.' in value:
+                        decimal_count += 1
+            except (ValueError, OverflowError):
                 pass
     
     # 如果大部分是数字
     if numeric_count > len(sample_values) * 0.8:
-        if decimal_count > 0:
+        if scientific_count > 0:
+            # 包含科学计数法，使用TEXT类型以保持精度
+            return 'TEXT'
+        elif decimal_count > 0:
             return 'DECIMAL(10, 4)'
         else:
             return 'INTEGER'
@@ -118,8 +141,11 @@ def analyze_csv_structure(csv_file_path: str, sample_rows: int = 10) -> List[Dic
         
         # 分析每一列
         for col_index, header in enumerate(headers):
-            # 清理列名
-            clean_name = clean_column_name(header)
+            # 清理列名 - 第5列之后保留中文字符
+            if col_index >= 5:
+                clean_name = clean_column_name(header, preserve_chinese=True)
+            else:
+                clean_name = clean_column_name(header, preserve_chinese=False)
             
             # 收集该列的样本值
             col_samples = []
@@ -174,8 +200,15 @@ def generate_sql_table(csv_file_path: str, table_name: str = "ModelEvaluation", 
     if len(columns_info) > 5:  # 如果CSV有超过6列（前6列对应固定列）
         for i in range(5, len(columns_info)):
             col_info = columns_info[i]
-            # 为额外的列使用DECIMAL类型，允许NULL值
-            col_def = f"    {col_info['clean_name']} DECIMAL(10, 4)"
+            # 根据推断的数据类型设置列定义
+            # 对于中文列名，使用双引号包围
+            if col_info['data_type'] == 'TEXT':
+                col_def = f'    "{col_info["clean_name"]}" TEXT'
+            elif col_info['data_type'] == 'INTEGER':
+                col_def = f'    "{col_info["clean_name"]}" INTEGER'
+            else:
+                # 默认使用DECIMAL类型，允许NULL值
+                col_def = f'    "{col_info["clean_name"]}" DECIMAL(10, 4)'
             column_definitions.append(col_def)
     
     sql_lines.append(",\n".join(column_definitions))
@@ -233,16 +266,24 @@ def import_csv_to_db(csv_file_path: str, db_path: str = "./static/summary.db"):
                 fieldnames.append('版本')
             elif i == 2:  # metric -> 评估指标
                 fieldnames.append('评估指标')
-            elif i == 3:  # mode -> 参数
+            elif i == 3:  # parameter -> 参数
                 fieldnames.append('参数')
-            elif i == 4:  # parameter -> 模式
+            elif i == 4:  # mode -> 模式
                 fieldnames.append('模式')
             else:
-                # 其他列使用清理后的列名
-                fieldnames.append(clean_column_name(field))
+                # 其他列使用清理后的列名，保留中文字符
+                fieldnames.append(clean_column_name(field, preserve_chinese=True))
         
         # 动态生成插入语句
-        columns = ', '.join(fieldnames)
+        # 对于中文列名，使用双引号包围
+        quoted_columns = []
+        for field in fieldnames:
+            if any('\u4e00' <= char <= '\u9fff' for char in field):  # 检查是否包含中文字符
+                quoted_columns.append(f'"{field}"')
+            else:
+                quoted_columns.append(field)
+        
+        columns = ', '.join(quoted_columns)
         placeholders = ', '.join(['?' for _ in fieldnames])
         insert_sql = f"""
         INSERT INTO ModelEvaluation 
@@ -254,30 +295,35 @@ def import_csv_to_db(csv_file_path: str, db_path: str = "./static/summary.db"):
         for row in csv_reader:
             # 动态构建值列表，处理数值类型转换
             values = []
-            for field in original_fieldnames:
+            for i, field in enumerate(original_fieldnames):
                 value = row[field]
                 # 处理空值
                 if not value or not value.strip():
                     values.append(None)
                 else:
-                    # 尝试转换为浮点数（如果是数值字段）
-                    try:
-                        float_val = float(value)
-                        # 检查小数位数
-                        if '.' in value:
-                            decimal_places = len(value.split('.')[1])
-                            if decimal_places < 2:
-                                # 小数位数不足两位，补到两位
-                                values.append(f"{float_val:.2f}")
-                            else:
-                                # 小数位数足够，保持原样
-                                values.append(value)
-                        else:
-                            # 整数，格式化为两位小数
-                            values.append(f"{float_val:.2f}")
-                    except ValueError:
-                        # 如果转换失败，保持原始字符串值
+                    # 前5列保持为字符串
+                    if i < 5:
                         values.append(value)
+                    else:
+                        # 第6列开始尝试转换为数值类型
+                        try:
+                            # 处理科学计数法格式
+                            if 'E' in value.upper() or 'e' in value:
+                                # 科学计数法格式，需要特殊处理
+                                float_val = float(value)
+                                # 检查数值是否过大或过小，避免SQLite精度问题
+                                if abs(float_val) > 1e308 or (abs(float_val) < 1e-308 and float_val != 0):
+                                    # 数值超出SQLite的REAL类型范围，存储为字符串
+                                    values.append(value)
+                                else:
+                                    values.append(float_val)
+                            else:
+                                # 普通数值格式
+                                float_val = float(value)
+                                values.append(float_val)
+                        except (ValueError, OverflowError):
+                            # 如果转换失败，保持原始字符串值
+                            values.append(value)
             
             cursor.execute(insert_sql, values)
     
@@ -496,20 +542,197 @@ def index():
             print(f"数据库已更新，导入 {result} 条记录")
         elif result == -1:
             print("数据库无需更新")
+        elif result == 0:
+            # 如果处理失败，尝试强制更新
+            print("尝试强制更新数据库...")
+            result = process_csv_to_database(csv_file_path, "ModelEvaluation", db_path, force_update=True)
+            if result > 0:
+                print(f"强制更新成功，导入 {result} 条记录")
+            else:
+                print("强制更新失败")
     else:
         print(f"CSV文件不存在: {csv_file_path}")
     
-    data = []
     # 判断数据库文件是否存在
     if os.path.exists(db_path):
-        # 读取数据库数据
-        data = read_sqlite_data(db_path)
-        # 渲染为HTML表格
-        table_html = render_table(data)
+        # 获取分组统计数据
+        grouped_data = get_grouped_statistics(db_path)
+        # 渲染分组统计表格
+        table_html = render_grouped_table(grouped_data)
     else:
         print(f"数据库文件不存在: {db_path}")
+        table_html = "<p>数据库文件不存在</p>"
+    
     # 渲染页面模板，并传递表格HTML
     return render_template('index.html', table=table_html)
+
+
+def get_grouped_statistics(db_path):
+    """
+    获取按dataset分组并按metric统计的数据
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 检查表是否存在
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ModelEvaluation'")
+        if not cursor.fetchone():
+            print("错误: ModelEvaluation 表不存在")
+            return []
+        
+        # 首先获取所有数值列名（除了前4列：dataset, version, metric, mode）
+        try:
+            cursor.execute("PRAGMA table_info(ModelEvaluation)")
+            columns_info = cursor.fetchall()
+            
+            # 打印当前表结构，用于调试
+            print("当前表结构:")
+            for i, col_info in enumerate(columns_info):
+                print(f"  列 {i}: {col_info[1]} ({col_info[2]})")
+        except Exception as e:
+            print(f"获取表结构时出错: {e}")
+            return []
+        
+        # 获取数值列名（动态识别，跳过前5列）
+        numeric_columns = []
+        for i, col_info in enumerate(columns_info):
+            if i >= 5:  # 跳过前5列，从第6列开始
+                column_name = col_info[1]
+                # 跳过模式列，它不应该是数值列
+                if column_name != '模式':
+                    # 处理列名中的特殊字符
+                    safe_column_name = f'"{column_name}"'
+                    numeric_columns.append((column_name, safe_column_name))
+        
+        print(f"识别到的数值列: {[col[0] for col in numeric_columns]}")
+        
+        if not numeric_columns:
+            return []
+        
+        # 使用SQL实现分组和平均值计算
+        sql_query = f"""
+        WITH dataset_groups AS (
+            SELECT 
+                数据集,
+                版本,
+                评估指标,
+                参数,
+                模式,
+                """ + ', '.join([f'"{col_name}"' for col_name, _ in numeric_columns]) + """,
+                CASE 
+                    WHEN INSTR(数据集, '_') > 0 AND INSTR(数据集, '-') > 0 THEN 
+                        CASE 
+                            WHEN INSTR(数据集, '_') < INSTR(数据集, '-') THEN SUBSTR(数据集, 1, INSTR(数据集, '_') - 1)
+                            ELSE SUBSTR(数据集, 1, INSTR(数据集, '-') - 1)
+                        END
+                    WHEN INSTR(数据集, '_') > 0 THEN SUBSTR(数据集, 1, INSTR(数据集, '_') - 1)
+                    WHEN INSTR(数据集, '-') > 0 THEN SUBSTR(数据集, 1, INSTR(数据集, '-') - 1)
+                    ELSE 数据集 
+                END as dataset_identifier,
+                ROW_NUMBER() OVER (
+                    PARTITION BY CASE 
+                        WHEN INSTR(数据集, '_') > 0 AND INSTR(数据集, '-') > 0 THEN 
+                            CASE 
+                                WHEN INSTR(数据集, '_') < INSTR(数据集, '-') THEN SUBSTR(数据集, 1, INSTR(数据集, '_') - 1)
+                                ELSE SUBSTR(数据集, 1, INSTR(数据集, '-') - 1)
+                            END
+                        WHEN INSTR(数据集, '_') > 0 THEN SUBSTR(数据集, 1, INSTR(数据集, '_') - 1)
+                        WHEN INSTR(数据集, '-') > 0 THEN SUBSTR(数据集, 1, INSTR(数据集, '-') - 1)
+                        ELSE 数据集 
+                    END
+                    ORDER BY 数据集, 版本, 评估指标
+                ) as row_num
+            FROM ModelEvaluation
+        ),
+        avg_values AS (
+            SELECT 
+                dataset_identifier,
+                """ + ', '.join([f'AVG("{col_name}") as avg_{col_name}' for col_name, _ in numeric_columns]) + """
+            FROM dataset_groups
+            GROUP BY dataset_identifier
+        )
+        SELECT 
+            CASE WHEN d.row_num = 1 THEN d.dataset_identifier ELSE '' END as 数据集,
+            d.版本,
+            d.评估指标,
+            d.参数,
+            d.模式,
+            """ + ', '.join([f'CASE WHEN d.row_num = 1 THEN a.avg_{col_name} ELSE NULL END as "{col_name}"' for col_name, _ in numeric_columns]) + """
+        FROM dataset_groups d
+        LEFT JOIN avg_values a ON d.dataset_identifier = a.dataset_identifier
+        ORDER BY d.dataset_identifier, d.row_num
+        """
+        
+        cursor.execute(sql_query)
+        results = cursor.fetchall()
+        
+        # 获取列名
+        column_names = [desc[0] for desc in cursor.description]
+        
+        conn.close()
+        
+        # 转换为字典列表
+        data = []
+        for row in results:
+            row_dict = {}
+            for i, value in enumerate(row):
+                row_dict[column_names[i]] = value
+            data.append(row_dict)
+        
+        return data
+        
+    except Exception as e:
+        print(f"获取分组统计时出错: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def render_grouped_table(data):
+    """
+    渲染分组统计表格
+    """
+    if not data:
+        return "<p>暂无数据</p>"
+    
+    html = '<div class="table-container">'
+    html += '<table class="data-table">'
+    
+    # 表头
+    html += '<thead><tr>'
+    for key in data[0].keys():
+        html += f'<th>{key}</th>'
+    html += '</tr></thead>'
+    
+    # 表体
+    html += '<tbody>'
+    for row in data:
+        html += '<tr>'
+        for i, (key, value) in enumerate(row.items()):
+            if i == 0:  # 第一列（数据集）
+                # SQL已经处理了数据集名的显示，直接显示即可
+                formatted_value = str(value) if value is not None else ''
+                html += f'<td>{formatted_value}</td>'
+            else:
+                # 其他列正常显示
+                if key not in ['数据集', '评估指标', '参数', '模式', '版本'] and value is not None:
+                    # 格式化数值列，保留2位小数
+                    try:
+                        if isinstance(value, (int, float)):
+                            formatted_value = f"{float(value):.2f}"
+                        else:
+                            formatted_value = f"{float(value):.2f}"
+                    except (ValueError, TypeError):
+                        formatted_value = str(value)
+                else:
+                    formatted_value = str(value) if value is not None else ''
+                html += f'<td>{formatted_value}</td>'
+        html += '</tr>'
+    html += '</tbody>'
+    
+    html += '</table></div>'
+    return html
 
 
 @app.route('/refresh')
