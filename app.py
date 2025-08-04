@@ -610,7 +610,7 @@ def get_grouped_statistics(db_path):
         if not numeric_columns:
             return []
         
-        # 使用SQL实现分组和平均值计算
+        # 使用SQL实现双重分组和平均值计算
         sql_query = f"""
         WITH dataset_groups AS (
             SELECT 
@@ -640,7 +640,7 @@ def get_grouped_statistics(db_path):
                         WHEN INSTR(数据集, '_') > 0 THEN SUBSTR(数据集, 1, INSTR(数据集, '_') - 1)
                         WHEN INSTR(数据集, '-') > 0 THEN SUBSTR(数据集, 1, INSTR(数据集, '-') - 1)
                         ELSE 数据集 
-                    END
+                    END, 评估指标
                     ORDER BY 数据集, 版本, 评估指标
                 ) as row_num
             FROM ModelEvaluation
@@ -648,9 +648,10 @@ def get_grouped_statistics(db_path):
         avg_values AS (
             SELECT 
                 dataset_identifier,
+                评估指标,
                 """ + ', '.join([f'AVG("{col_name}") as avg_{col_name}' for col_name, _ in numeric_columns]) + """
             FROM dataset_groups
-            GROUP BY dataset_identifier
+            GROUP BY dataset_identifier, 评估指标
         )
         SELECT 
             CASE WHEN d.row_num = 1 THEN d.dataset_identifier ELSE '' END as 数据集,
@@ -660,8 +661,8 @@ def get_grouped_statistics(db_path):
             d.模式,
             """ + ', '.join([f'CASE WHEN d.row_num = 1 THEN a.avg_{col_name} ELSE NULL END as "{col_name}"' for col_name, _ in numeric_columns]) + """
         FROM dataset_groups d
-        LEFT JOIN avg_values a ON d.dataset_identifier = a.dataset_identifier
-        ORDER BY d.dataset_identifier, d.row_num
+        LEFT JOIN avg_values a ON d.dataset_identifier = a.dataset_identifier AND d.评估指标 = a.评估指标
+        ORDER BY d.dataset_identifier, d.评估指标, d.row_num
         """
         
         cursor.execute(sql_query)
