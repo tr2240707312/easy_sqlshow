@@ -110,8 +110,8 @@ tydiqa-goldp_thai,3e6b28,exact_match,文本问答,gen,0
 triviaqa,2121ce,score,文本问答,gen,42
 nq,c788f6,score,文本问答,gen,18
 C3,8c358f,accuracy,test,gen,80
-race-middle,9a54b6,accuracy,长文本理解,gen,88,
-race-high,9a54b6,accuracy,长文本理解,gen,82,
+race-middle,9a54b6,accuracy,长文本理解,gen,88
+race-high,9a54b6,accuracy,长文本理解,gen,82
 lcsts,8ee1fe,rouge1,摘要总结,gen,17.98
 lcsts,8ee1fe,rouge2,摘要总结,gen,5.83
 lcsts,8ee1fe,rougeL,摘要总结,gen,15.36
@@ -124,12 +124,13 @@ COPA,91ca53,accuracy,文本分类,gen,70
 ReCoRD,30dea0,score,文本分类,gen,28
 math,393424,accuracy,数学推理,gen,40
 gsm8k,1d7fe4,accuracy,数学推理,gen,62
-drop,8a9ed9,score,长文本理解,gen,48,
+drop,8a9ed9,score,长文本理解,gen,48
+openai_humaneval,-,-,代码生成,-,
 mbpp,1e1056,score,代码生成,gen,42
 mbpp,1e1056,pass,代码生成,gen,21
 mbpp,1e1056,timeout,代码生成,gen,0
 mbpp,1e1056,failed,代码生成,gen,7
-mbpp,1e1056,wrong_answer,代码生成,gen,22
+mbpp,1e1056,wrong_answer,代码理解,gen,22
 bbh-temporal_sequences,e43931,score,代码理解,gen,20
 bbh-disambiguation_qa,d52c61,score,代码理解,gen,36
 bbh-date_understanding,a8000b,score,代码理解,gen,36
@@ -156,7 +157,7 @@ bbh-boolean_expressions,612c92,score,代码理解,gen,86
 bbh-object_counting,781e5c,score,代码理解,gen,54
 bbh-formal_fallacies,eada96,score,代码理解,gen,4
 bbh-causal_judgement,89eaa4,score,代码理解,gen,52
-bbh-web_of_lies,0c0441,score,代码理解,gen,70
+bbh-web_of_lies,0c0441,score,文本问答,gen,70
 lukaemon_mmlu_college_biology,caec7d,accuracy,文本问答,gen,72
 lukaemon_mmlu_college_chemistry,520aa6,accuracy,文本问答,gen,42
 lukaemon_mmlu_college_computer_science,99c216,accuracy,文本问答,gen,56
